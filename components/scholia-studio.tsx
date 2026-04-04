@@ -439,11 +439,7 @@ export function ScholiaStudio() {
   const handleSelectVerse = (verseId: string | null) => {
     setSelectedVerseId(verseId);
 
-    if (verseId) {
-      if (!isDesktopLayout) {
-        setIsNotesSidebarOpen(false);
-      }
-
+    if (verseId && isDesktopLayout) {
       setIsContextSidebarOpen(true);
     }
   };
@@ -571,6 +567,20 @@ export function ScholiaStudio() {
               <span className="text-[#988c7c]">No verses added yet.</span>
             )}
           </div>
+
+          {!isDesktopLayout && selectedReferenceLabel ? (
+            <button
+              type="button"
+              onClick={() => {
+                setIsContextSidebarOpen(true);
+                setIsNotesSidebarOpen(false);
+              }}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#db6700] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#bf5b00]"
+            >
+              <SidebarToggleIcon side="right" isOpen={false} />
+              Show context for {selectedReferenceLabel}
+            </button>
+          ) : null}
         </section>
 
         {isDesktopLayout && isContextSidebarOpen ? (
@@ -607,7 +617,7 @@ export function ScholiaStudio() {
         </button>
       ) : null}
 
-      {!isContextSidebarOpen ? (
+      {isDesktopLayout && !isContextSidebarOpen ? (
         <button
           type="button"
           onClick={() => {
