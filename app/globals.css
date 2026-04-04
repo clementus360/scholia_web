@@ -12,15 +12,307 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background:
+    radial-gradient(circle at top left, rgba(232, 121, 34, 0.12), transparent 30%),
+    radial-gradient(circle at top right, rgba(84, 112, 152, 0.08), transparent 28%),
+    linear-gradient(180deg, #f8f3eb 0%, #f4eee6 100%);
 }
 
 body {
-  background: var(--background);
+  min-height: 100vh;
+  background: transparent;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+::selection {
+  background: rgba(232, 121, 34, 0.2);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Contenteditable editor */
+[contenteditable] {
+  word-break: break-word;
+  white-space: normal;
+}
+
+[contenteditable]:focus {
+  outline: none;
+}
+
+.verse-reference {
+  cursor: pointer;
+  background-color: #fce5cc;
+  color: #8a4d14;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-weight: 500;
+  transition:
+    transform 100ms ease,
+    box-shadow 100ms ease,
+    background-color 100ms ease;
+  display: inline-block;
+  user-select: none;
+}
+
+.verse-reference:hover {
+  background-color: #ffd699;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(219, 103, 0, 0.15);
+}
+
+.verse-quote {
+  display: block;
+  background-color: #fff3e4;
+  border-left: 4px solid #db6700;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+  font-style: italic;
+  color: #3b2a1d;
+  position: relative;
+  line-height: 1.6;
+}
+
+.verse-quote::before {
+  content: "❝";
+  font-style: normal;
+  font-weight: 300;
+  font-size: 2rem;
+  color: rgba(219, 103, 0, 0.25);
+  position: absolute;
+  left: -0.5rem;
+  top: -0.75rem;
+  line-height: 1;
+}
+
+.scholia-editor {
+  min-height: 100%;
+  color: #241d17;
+}
+
+.scholia-editor .ProseMirror {
+  min-height: 100%;
+  width: 100%;
+  cursor: text;
+  outline: none;
+}
+
+.scholia-editor:focus {
+  outline: none;
+}
+
+.scholia-editor p {
+  margin: 0.75rem 0;
+}
+
+.scholia-editor .verse-reference {
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+
+.scholia-editor .verse-reference:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(219, 103, 0, 0.12);
+  background: #ffe7bf;
+}
+
+.scholia-editor blockquote.verse-quote {
+  position: relative;
+  margin: 1rem 0;
+  border: 1px solid rgba(219, 103, 0, 0.22);
+  border-radius: 12px;
+  background: #fff5e8;
+  padding: 2.15rem 1.3rem 1.25rem;
+  color: #3b2a1d;
+  text-align: center;
+  font-weight: 600;
+}
+
+.scholia-editor blockquote.verse-quote::before {
+  content: "\201C";
+  position: absolute;
+  left: 0.85rem;
+  top: 0.08rem;
+  transform: none;
+  font-size: 3.5rem;
+  line-height: 1;
+  color: rgba(219, 103, 0, 0.42);
+}
+
+.scholia-editor blockquote.verse-quote p {
+  margin: 0.25rem 0;
+}
+
+.scholia-editor blockquote.verse-quote .verse-quote-reference {
+  display: block;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #99541f;
+}
+
+.scholia-editor blockquote.verse-quote .verse-quote-text {
+  font-size: 1.1rem;
+  line-height: 1.9;
+}
+
+/* Quill editor wrapper */
+.quill-wrapper {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  border: 0 !important;
+}
+
+.quill-wrapper .ql-container {
+  flex: 1;
+  min-height: 0;
+  border: 0 !important;
+  font-family: inherit;
+  font-size: inherit;
+  height: auto;
+}
+
+.quill-wrapper .ql-editor {
+  padding: 1.25rem;
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.quill-wrapper .ql-editor::-webkit-scrollbar {
+  width: 10px;
+}
+
+.quill-wrapper .ql-editor::-webkit-scrollbar-track {
+  background: #f5ede3;
+  border-radius: 999px;
+}
+
+.quill-wrapper .ql-editor::-webkit-scrollbar-thumb {
+  background: #d8c2ab;
+  border-radius: 999px;
+}
+
+.quill-wrapper .ql-editor .verse-reference {
+  display: inline-block;
+  cursor: pointer;
+  border: 1px solid #f0c08f;
+  border-radius: 999px;
+  background: #ffefd9;
+  color: #7a4817;
+  padding: 0.05rem 0.5rem;
+  font-weight: 600;
+  transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.quill-wrapper .ql-editor .verse-reference:hover {
+  background: #ffe2b9;
+  box-shadow: 0 6px 14px rgba(219, 103, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+.quill-wrapper .ql-editor blockquote.verse-quote {
+  position: relative;
+  margin: 1rem 0;
+  border: 1px solid rgba(219, 103, 0, 0.22);
+  border-left: 0;
+  border-radius: 12px;
+  background: #fff5e8;
+  padding: 2.1rem 1.2rem 1.2rem;
+  color: #3b2a1d;
+  text-align: center;
+  font-weight: 600;
+}
+
+.quill-wrapper .ql-editor blockquote.verse-quote::before {
+  position: absolute;
+  left: 0.85rem;
+  top: 0.08rem;
+  transform: none;
+  font-size: 3.25rem;
+  line-height: 1;
+  color: rgba(219, 103, 0, 0.42);
+}
+
+.quill-wrapper .ql-editor blockquote {
+  position: relative;
+  margin: 1rem 0;
+  border-radius: 12px;
+  background: #fff5e8;
+  padding: 2.1rem 1.2rem 1.2rem;
+  color: #3b2a1d;
+  text-align: center;
+  font-size: 1.06rem;
+  line-height: 1.85;
+  font-weight: 600;
+}
+
+.quill-wrapper .ql-editor blockquote::before {
+  content: "\201C";
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  left: 0.85rem;
+  top: 0.08rem;
+  transform: none;
+  font-size: 3.25rem;
+  line-height: 1;
+  color: rgba(219, 103, 0, 0.42);
+}
+
+.quill-wrapper .ql-editor .verse-quote-reference {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a95f24;
+}
+
+.quill-wrapper .ql-toolbar {
+  border: 0 !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+  padding: 0.75rem 1rem !important;
+}
+
+.quill-wrapper .ql-toolbar .ql-stroke {
+  stroke: #5e5449;
+}
+
+.quill-wrapper .ql-toolbar .ql-fill {
+  fill: #5e5449;
+}
+
+.quill-wrapper .ql-toolbar.ql-snow .ql-button:hover .ql-stroke,
+.quill-wrapper .ql-toolbar.ql-snow .ql-button.ql-active .ql-stroke {
+  stroke: #db6700;
+}
+
+.quill-wrapper .ql-toolbar.ql-snow .ql-button:hover .ql-fill,
+.quill-wrapper .ql-toolbar.ql-snow .ql-button.ql-active .ql-fill {
+  fill: #db6700;
+}
+
+.ql-snow .ql-editor blockquote {
+  border-left: 0 !important;
 }

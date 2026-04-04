@@ -1,4 +1,24 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a Next.js app for Scholia web notes and verse context.
+
+## Environment Variables
+
+Create a local env file before running the app:
+
+```bash
+cp .env.example .env.local
+```
+
+Required:
+
+- `NEXT_PUBLIC_SCHOLIA_API_URL` - Base URL for the backend API (for example `https://api.yourdomain.com/api/v1`).
+
+Optional:
+
+- `NEXT_PUBLIC_SCHOLIA_API_KEY` - API key used for write operations.
+
+Production note:
+
+- `NEXT_PUBLIC_SCHOLIA_API_URL` must be set in deployment environments.
 
 ## Getting Started
 
