@@ -128,6 +128,26 @@ export function RichNoteEditor({
 
       quillRef.current = quill;
 
+      const findVerseAtCursor = (plainText: string, cursorIndex: number) => {
+        const matches = findReferenceMatches(plainText);
+
+        for (const match of matches) {
+          const labelPattern = new RegExp(`\\b${escapeRegex(match.label)}\\b`, "gi");
+          let result: RegExpExecArray | null;
+
+          while ((result = labelPattern.exec(plainText)) !== null) {
+            const start = result.index;
+            const end = start + result[0].length;
+
+            if (cursorIndex >= start && cursorIndex <= end) {
+              return match.osisId;
+            }
+          }
+        }
+
+        return null;
+      };
+
       const applyVerseHighlights = () => {
         if (!quillRef.current || highlightRef.current) {
           return;
@@ -163,11 +183,15 @@ export function RichNoteEditor({
         const html = quillRef.current.root.innerHTML;
         const plainText = quillRef.current.getText().trimEnd();
         const verses = findReferenceMatches(plainText);
+        const selection = quillRef.current.getSelection();
+        const cursorIndex = selection?.index ?? plainText.length;
 
         onChangeRef.current(html, plainText);
 
         if (verses.length > 0) {
-          onSelectVerseRef.current(verses[0].osisId);
+          const verseAtCursor = findVerseAtCursor(plainText, cursorIndex);
+          const fallbackVerse = verses[verses.length - 1]?.osisId ?? null;
+          onSelectVerseRef.current(verseAtCursor ?? fallbackVerse);
         }
       };
 
@@ -186,22 +210,11 @@ export function RichNoteEditor({
         }
 
         const plainText = quillRef.current.getText().trimEnd();
-        const matches = findReferenceMatches(plainText);
         const cursorIndex = range.index;
+        const verseAtCursor = findVerseAtCursor(plainText, cursorIndex);
 
-        for (const match of matches) {
-          const labelPattern = new RegExp(`\\b${escapeRegex(match.label)}\\b`, "gi");
-          let result: RegExpExecArray | null;
-
-          while ((result = labelPattern.exec(plainText)) !== null) {
-            const start = result.index;
-            const end = start + result[0].length;
-
-            if (cursorIndex >= start && cursorIndex <= end) {
-              onSelectVerseRef.current(match.osisId);
-              return;
-            }
-          }
+        if (verseAtCursor) {
+          onSelectVerseRef.current(verseAtCursor);
         }
       };
 
