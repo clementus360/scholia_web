@@ -172,12 +172,19 @@ a {
   line-height: 1.9;
 }
 
-.scholia-editor blockquote.verse-quote .verse-quote-number {
-  font-size: 0.72rem;
+.scholia-editor blockquote.verse-quote .verse-quote-number,
+.scholia-editor blockquote.verse-quote sup {
+  display: inline-block;
+  font-size: 0.62rem;
+  line-height: 1;
   font-weight: 700;
-  color: #c26b1f;
-  vertical-align: baseline;
-  margin-right: 0.3rem;
+  color: #db6700 !important;
+  vertical-align: super;
+  margin-right: 0.28rem;
+}
+
+.scholia-editor blockquote sup {
+  color: #db6700 !important;
 }
 
 /* Quill editor wrapper */
@@ -304,12 +311,19 @@ a {
   margin: 0;
 }
 
-.quill-wrapper .ql-editor .verse-quote-number {
-  font-size: 0.72rem;
+.quill-wrapper .ql-editor .verse-quote-number,
+.quill-wrapper .ql-editor blockquote.verse-quote sup {
+  display: inline-block;
+  font-size: 0.62rem;
+  line-height: 1;
   font-weight: 700;
-  color: #c26b1f;
-  vertical-align: baseline;
-  margin-right: 0.3rem;
+  color: #db6700 !important;
+  vertical-align: super;
+  margin-right: 0.28rem;
+}
+
+.quill-wrapper .ql-editor blockquote sup {
+  color: #db6700 !important;
 }
 
 .quill-wrapper .ql-toolbar {

@@ -300,7 +300,7 @@ export function RichNoteEditor({
       // Verse range - keep all verses in one inline quote block (no extra line breaks)
       const verses = "verses" in context ? context.verses : [];
       const versesContent = verses
-        .map((v) => `<span class="verse-quote-number">${escapeHtml(String(v.verse))}</span> ${escapeHtml(v.text)}`)
+        .map((v) => `<sup class="verse-quote-number">${escapeHtml(String(v.verse))}</sup> ${escapeHtml(v.text)}`)
         .join(" ");
       quoteHtml = `<blockquote class="verse-quote"><span class="verse-quote-reference">${escapeHtml(
         label,
