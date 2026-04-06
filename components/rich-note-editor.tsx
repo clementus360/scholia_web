@@ -32,6 +32,8 @@ type QuillLike = {
       (index: number, html: string, source?: QuillSource): void;
     };
   };
+  deleteText: (index: number, length: number, source?: QuillSource) => void;
+  setSelection: (index: number, length?: number, source?: QuillSource) => void;
   on: (event: "text-change" | "selection-change", handler: (range?: QuillRange | null) => void) => void;
   off: (event: "text-change" | "selection-change", handler: (range?: QuillRange | null) => void) => void;
   formatText: (
@@ -41,7 +43,10 @@ type QuillLike = {
     value: string | boolean,
     source?: QuillSource,
   ) => void;
-  getText: () => string;
+  getText: {
+    (): string;
+    (index: number, length: number): string;
+  };
   getLength: () => number;
   getSelection: (focus?: boolean) => QuillRange | null;
 };
@@ -283,9 +288,11 @@ export function RichNoteEditor({
       return;
     }
 
+    const cursorMarker = `__SCHOLIA_CURSOR_${Date.now()}__`;
+
     const quoteHtml = `<p><br></p><blockquote class="verse-quote"><span class="verse-quote-reference">${escapeHtml(
       label,
-    )}</span> ${escapeHtml(context.verse.text)}</blockquote><p><br></p>`;
+    )}</span> ${escapeHtml(context.verse.text)}</blockquote><p>${cursorMarker}</p>`;
 
     const quill = quillRef.current;
     const selection = quill.getSelection(true);
@@ -293,8 +300,20 @@ export function RichNoteEditor({
     const text = quill.getText();
     const lineBreakIndex = text.indexOf("\n", startIndex);
     const insertIndex = lineBreakIndex === -1 ? quill.getLength() : lineBreakIndex + 1;
+    const beforeLength = quill.getLength();
 
     quill.clipboard.dangerouslyPasteHTML(insertIndex, quoteHtml, "user");
+
+    const afterLength = quill.getLength();
+    const insertedLength = Math.max(afterLength - beforeLength, 0);
+    const insertedText = quill.getText(insertIndex, insertedLength);
+    const markerOffset = insertedText.indexOf(cursorMarker);
+
+    if (markerOffset !== -1) {
+      const markerIndex = insertIndex + markerOffset;
+      quill.deleteText(markerIndex, cursorMarker.length, "silent");
+      quill.setSelection(markerIndex, 0, "silent");
+    }
 
     const html = quill.root.innerHTML;
     const plainText = quill.getText().trimEnd();
