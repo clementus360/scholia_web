@@ -30,6 +30,13 @@ export type Verse = {
   text: string;
 };
 
+export type VerseRange = {
+  reference: string;
+  start: string;
+  end: string;
+  verses: Verse[];
+};
+
 export type Note = {
   id: number;
   title: string;
@@ -133,9 +140,11 @@ export type VerseAnalysisToken = {
   morphology?: MorphologyEntry;
 };
 
-export type VerseContext = {
-  verse: Verse;
+export type VerseAnalysisByVerse = Record<string, VerseAnalysisToken[]>;
+
+export type VerseContextBase = {
   analysis: VerseAnalysisToken[];
+  analysis_by_verse?: VerseAnalysisByVerse;
   lexicon: LexiconEntry[];
   locations: Location[];
   people: Person[];
@@ -145,9 +154,67 @@ export type VerseContext = {
   notes: Note[];
 };
 
+export type SingleVerseContext = VerseContextBase & {
+  verse: Verse;
+  verse_id?: string;
+};
+
+export type RangeVerseContext = VerseContextBase & {
+  verses: Verse[];
+  reference: string;
+  start: string;
+  end: string;
+  verse?: Verse;
+  verse_id?: string;
+  analysis_by_verse: VerseAnalysisByVerse;
+};
+
+export type VerseContext = SingleVerseContext | RangeVerseContext;
+
+export type VerseRangeCrossRefs = {
+  reference: string;
+  start: string;
+  end: string;
+  verse_id?: string;
+  cross_references: string[];
+};
+
+export type VerseRangeAnalysis = {
+  reference: string;
+  start: string;
+  end: string;
+  verse?: Verse;
+  verses: Verse[];
+  analysis: VerseAnalysisToken[];
+  analysis_by_verse: VerseAnalysisByVerse;
+};
+
+export type VerseRangeContext = {
+  reference: string;
+  start: string;
+  end: string;
+  verse?: Verse;
+  verses: Verse[];
+  analysis: VerseAnalysisToken[];
+  analysis_by_verse: VerseAnalysisByVerse;
+  lexicon: LexiconEntry[];
+  locations: Location[];
+  people: Person[];
+  groups: Group[];
+  events: Event[];
+  cross_references: string[];
+  notes: Note[];
+};
+
+export type VerseCrossReferencesResponse = VerseRangeCrossRefs;
+
+export type VerseAnalysisResponse = VerseRangeAnalysis;
+
 export type DetectedReference = {
   label: string;
   osisId: string;
+  start: number;
+  end: number;
 };
 
 export type ContextTabKey =

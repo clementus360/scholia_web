@@ -85,8 +85,6 @@ export function RichNoteEditor({
   const verseContextRef = useRef(verseContext);
   const onInsertVerseQuoteRef = useRef(onInsertVerseQuote);
 
-  const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
   const modules = useMemo(
     () => ({
       toolbar: [
@@ -137,16 +135,8 @@ export function RichNoteEditor({
         const matches = findReferenceMatches(plainText);
 
         for (const match of matches) {
-          const labelPattern = new RegExp(`\\b${escapeRegex(match.label)}\\b`, "gi");
-          let result: RegExpExecArray | null;
-
-          while ((result = labelPattern.exec(plainText)) !== null) {
-            const start = result.index;
-            const end = start + result[0].length;
-
-            if (cursorIndex >= start && cursorIndex <= end) {
-              return match.osisId;
-            }
+          if (cursorIndex >= match.start && cursorIndex <= match.end) {
+            return match.osisId;
           }
         }
 
@@ -167,12 +157,11 @@ export function RichNoteEditor({
         editor.formatText(0, editor.getLength(), "color", false, "silent");
 
         for (const match of matches) {
-          const labelPattern = new RegExp(`\\b${escapeRegex(match.label)}\\b`, "gi");
-          let result: RegExpExecArray | null;
+          const length = match.end - match.start;
 
-          while ((result = labelPattern.exec(plainText)) !== null) {
-            editor.formatText(result.index, result[0].length, "background", "#ffefd9", "silent");
-            editor.formatText(result.index, result[0].length, "color", "#7a4817", "silent");
+          if (length > 0) {
+            editor.formatText(match.start, length, "background", "#ffefd9", "silent");
+            editor.formatText(match.start, length, "color", "#7a4817", "silent");
           }
         }
         highlightRef.current = false;
@@ -284,15 +273,39 @@ export function RichNoteEditor({
     const label = selectedVerseLabelRef.current;
     const context = verseContextRef.current;
 
-    if (!label || !context?.verse) {
+    if (!label || !context) {
+      return;
+    }
+
+    // Check if this is a single verse or a verse range
+    const isRangeVerse = "verses" in context && context.verses.length > 0;
+    const isSingleVerse = "verse" in context && Boolean(context.verse) && !isRangeVerse;
+    const hasVerses = isSingleVerse || isRangeVerse;
+
+    if (!hasVerses) {
       return;
     }
 
     const cursorMarker = `__SCHOLIA_CURSOR_${Date.now()}__`;
 
-    const quoteHtml = `<p><br></p><blockquote class="verse-quote"><span class="verse-quote-reference">${escapeHtml(
-      label,
-    )}</span> ${escapeHtml(context.verse.text)}</blockquote><p>${cursorMarker}</p>`;
+    // Build quote HTML based on verse type
+    let quoteHtml: string;
+    if (isSingleVerse) {
+      // Single verse
+      const verseText = context.verse?.text ?? "";
+      quoteHtml = `<blockquote class="verse-quote"><span class="verse-quote-reference">${escapeHtml(
+        label,
+      )}</span> <span class="verse-quote-text">${escapeHtml(verseText)}</span></blockquote><p>${cursorMarker}</p>`;
+    } else {
+      // Verse range - keep all verses in one inline quote block (no extra line breaks)
+      const verses = "verses" in context ? context.verses : [];
+      const versesContent = verses
+        .map((v) => `<span class="verse-quote-number">${escapeHtml(String(v.verse))}</span> ${escapeHtml(v.text)}`)
+        .join(" ");
+      quoteHtml = `<blockquote class="verse-quote"><span class="verse-quote-reference">${escapeHtml(
+        label,
+      )}</span> <span class="verse-quote-text">${versesContent}</span></blockquote><p>${cursorMarker}</p>`;
+    }
 
     const quill = quillRef.current;
     const selection = quill.getSelection(true);

@@ -35,6 +35,50 @@ const contextTabs: Array<{
     { key: "crossReferences", label: "Cross Refs" },
   ];
 
+/**
+ * Check if a VerseContext has valid verse data (either single or range)
+ */
+function hasValidVerseData(context: VerseContext | null): boolean {
+  if (!context) return false;
+  if ("verses" in context && Array.isArray(context.verses) && context.verses.length > 0) return true;
+  if ("verse" in context && context.verse) return true;
+  return false;
+}
+
+type VersePreviewLine = {
+  key: string;
+  verseNumber: number;
+  text: string;
+};
+
+function getVersePreviewLinesFromContext(context: VerseContext | null): VersePreviewLine[] {
+  if (!context) {
+    return [];
+  }
+
+  if ("verses" in context && Array.isArray(context.verses) && context.verses.length > 0) {
+    return context.verses.map((verse) => ({
+      key: verse.id,
+      verseNumber: verse.verse,
+      text: verse.text,
+    }));
+  }
+
+  if ("verse" in context && context.verse) {
+    const verse = context.verse;
+
+    return [
+      {
+        key: verse.id,
+        verseNumber: verse.verse,
+        text: verse.text,
+      },
+    ];
+  }
+
+  return [];
+}
+
 export function ScholiaStudio() {
   const [notes, setNotes] = useState<LocalNote[]>([]);
   const [activeNoteId, setActiveNoteId] = useState<number | null>(null);
@@ -419,7 +463,7 @@ export function ScholiaStudio() {
   };
 
   const handleInsertVerseQuote = (contentHtml: string, plainText: string) => {
-    if (!activeNote || !selectedVerseId || !contextResult.data?.verse) {
+    if (!activeNote || !selectedVerseId || !hasValidVerseData(contextResult.data)) {
       return;
     }
 
@@ -605,13 +649,13 @@ export function ScholiaStudio() {
         {isDesktopLayout && isContextSidebarOpen ? (
           <ContextRail
             selectedReferenceLabel={selectedReferenceLabel}
-            verseText={contextResult.data?.verse.text ?? ""}
+            verseLines={getVersePreviewLinesFromContext(contextResult.data)}
             contextError={contextResult.error}
             context={contextBody}
             activeTab={activeTab}
             onSelectTab={setActiveTab}
             onInsertQuote={() => setInsertQuoteSignal((current) => current + 1)}
-            canInsertQuote={Boolean(selectedReferenceLabel && contextResult.data?.verse)}
+            canInsertQuote={Boolean(selectedReferenceLabel && hasValidVerseData(contextResult.data))}
             onToggleSidebar={() => setIsContextSidebarOpen(false)}
             isOpen={isContextSidebarOpen}
             mode="desktop"
@@ -688,13 +732,13 @@ export function ScholiaStudio() {
           <div className="fixed inset-y-0 right-0 z-50 w-[90vw] max-w-[360px] shadow-xl">
             <ContextRail
               selectedReferenceLabel={selectedReferenceLabel}
-              verseText={contextResult.data?.verse.text ?? ""}
+              verseLines={getVersePreviewLinesFromContext(contextResult.data)}
               contextError={contextResult.error}
               context={contextBody}
               activeTab={activeTab}
               onSelectTab={setActiveTab}
               onInsertQuote={() => setInsertQuoteSignal((current) => current + 1)}
-              canInsertQuote={Boolean(selectedReferenceLabel && contextResult.data?.verse)}
+              canInsertQuote={Boolean(selectedReferenceLabel && hasValidVerseData(contextResult.data))}
               onToggleSidebar={() => setIsContextSidebarOpen(false)}
               isOpen={isContextSidebarOpen}
               mode="mobile"
@@ -876,7 +920,7 @@ function NotesSidebar({
 
 function ContextRail({
   selectedReferenceLabel,
-  verseText,
+  verseLines,
   contextError,
   context,
   activeTab,
@@ -888,7 +932,7 @@ function ContextRail({
   mode,
 }: {
   selectedReferenceLabel: string | null;
-  verseText: string;
+  verseLines: VersePreviewLine[];
   contextError: string | null;
   context: React.ReactNode;
   activeTab: ContextTabKey;
@@ -947,7 +991,18 @@ function ContextRail({
         <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#17120e]">{selectedReferenceLabel}</h2>
 
         <div className="mt-4 rounded-[14px] bg-[#fae7d2] px-4 py-3 text-sm leading-6 text-[#3c2d1f]">
-          {verseText || "The selected verse will appear here together with its study context."}
+          {verseLines.length > 0 ? (
+            <div className="space-y-3">
+              {verseLines.map((verseLine) => (
+                <p key={verseLine.key}>
+                  <span className="mr-2 align-top text-[0.72rem] font-semibold text-[#c26b1f]">{verseLine.verseNumber}</span>
+                  {verseLine.text}
+                </p>
+              ))}
+            </div>
+          ) : (
+            "The selected verse will appear here together with its study context."
+          )}
         </div>
 
         <button
@@ -991,6 +1046,8 @@ function ContextRail({
 
 function renderContextBody(activeTab: ContextTabKey, context: VerseContext, lexiconDetails: LexiconDetailsState) {
   if (activeTab === "lexicon") {
+    const verseOrderIndex = buildVerseOrderIndex(context);
+
     return (
       <div className="space-y-3">
         {context.lexicon.map((entry) => {
@@ -998,11 +1055,7 @@ function renderContextBody(activeTab: ContextTabKey, context: VerseContext, lexi
           const detail = detailState?.data;
           const definitionSource = detail?.definition || entry.definition;
           const occurrences = (detail?.occurrences ?? []).slice().sort((left, right) => {
-            if (left.verse_id !== right.verse_id) {
-              return left.verse_id.localeCompare(right.verse_id);
-            }
-
-            return left.word_order - right.word_order;
+            return compareOccurrencesByVerseOrder(left, right, verseOrderIndex);
           });
           const meaning = buildLexiconMeaningPresentation(definitionSource, occurrences);
 
@@ -1335,6 +1388,79 @@ function renderContextBody(activeTab: ContextTabKey, context: VerseContext, lexi
       )}
     </div>
   );
+}
+
+function buildVerseOrderIndex(context: VerseContext): Map<string, number> {
+  const index = new Map<string, number>();
+
+  if ("verses" in context && Array.isArray(context.verses) && context.verses.length > 0) {
+    context.verses.forEach((verse, order) => {
+      index.set(verse.id, order);
+    });
+
+    return index;
+  }
+
+  if ("verse" in context && context.verse) {
+    index.set(context.verse.id, 0);
+  }
+
+  return index;
+}
+
+function compareOccurrencesByVerseOrder(
+  left: LexiconOccurrence,
+  right: LexiconOccurrence,
+  verseOrderIndex: Map<string, number>,
+): number {
+  const leftRank = verseOrderIndex.get(left.verse_id);
+  const rightRank = verseOrderIndex.get(right.verse_id);
+
+  if (leftRank !== undefined && rightRank !== undefined && leftRank !== rightRank) {
+    return leftRank - rightRank;
+  }
+
+  if (leftRank !== undefined && rightRank === undefined) {
+    return -1;
+  }
+
+  if (leftRank === undefined && rightRank !== undefined) {
+    return 1;
+  }
+
+  const leftReferenceOrder = getReferenceSortKey(left.verse_id);
+  const rightReferenceOrder = getReferenceSortKey(right.verse_id);
+
+  if (leftReferenceOrder.chapter !== rightReferenceOrder.chapter) {
+    return leftReferenceOrder.chapter - rightReferenceOrder.chapter;
+  }
+
+  if (leftReferenceOrder.verse !== rightReferenceOrder.verse) {
+    return leftReferenceOrder.verse - rightReferenceOrder.verse;
+  }
+
+  if (left.verse_id !== right.verse_id) {
+    return left.verse_id.localeCompare(right.verse_id);
+  }
+
+  return left.word_order - right.word_order;
+}
+
+function getReferenceSortKey(verseId: string): { chapter: number; verse: number } {
+  const parts = verseId.split(".");
+
+  if (parts.length !== 3) {
+    return { chapter: Number.MAX_SAFE_INTEGER, verse: Number.MAX_SAFE_INTEGER };
+  }
+
+  const chapter = Number(parts[1]);
+  const versePart = parts[2].split("-")[0];
+  const verse = Number(versePart);
+
+  return {
+    chapter: Number.isFinite(chapter) ? chapter : Number.MAX_SAFE_INTEGER,
+    verse: Number.isFinite(verse) ? verse : Number.MAX_SAFE_INTEGER,
+  };
 }
 
 function EmptyContextCard({

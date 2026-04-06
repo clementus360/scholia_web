@@ -42,7 +42,7 @@ export const VerseReferenceMark = Mark.create({
   addInputRules() {
     return [
       markInputRule({
-        find: /\b((?:[1-3]\s)?[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)?)\s+(\d+):(\d+)\b$/,
+        find: /\b((?:[1-3]\s)?[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)?)\s+(\d+):(\d+)(?:\s*-\s*(\d+))?\b$/,
         type: this.type,
         getAttributes: (match) => {
           const reference = resolveReferenceFromMatch(match as RegExpMatchArray);
@@ -56,7 +56,7 @@ export const VerseReferenceMark = Mark.create({
   addPasteRules() {
     return [
       markPasteRule({
-        find: /\b((?:[1-3]\s)?[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)?)\s+(\d+):(\d+)\b/g,
+        find: /\b((?:[1-3]\s)?[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)?)\s+(\d+):(\d+)(?:\s*-\s*(\d+))?\b/g,
         type: this.type,
         getAttributes: (match) => {
           const reference = resolveReferenceFromMatch(match as RegExpMatchArray);
@@ -110,6 +110,19 @@ export function buildVerseQuoteHtml(reference: string, verseText: string): strin
   `;
 }
 
+export function buildVerseRangeQuoteHtml(reference: string, verses: { book: string; chapter: number; verse: number; text: string }[]): string {
+  const versesHtml = verses
+    .map((v) => `<p><strong>${escapeHtml(`${v.book} ${v.chapter}:${v.verse}`)}</strong> ${escapeHtml(v.text)}</p>`)
+    .join("");
+
+  return `
+    <blockquote data-verse-id="${escapeHtmlAttribute(reference)}" class="verse-quote">
+      <p class="verse-quote-reference">${escapeHtml(reference)}</p>
+      ${versesHtml}
+    </blockquote>
+  `;
+}
+
 export function stripHtml(content: string): string {
   if (!content) {
     return "";
@@ -147,7 +160,7 @@ export function highlightReferencesInHtml(html: string): string {
         continue;
       }
 
-      if (node.textContent?.match(/\b((?:[1-3]\s)?[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)?)\s+(\d+):(\d+)\b/)) {
+      if (node.textContent?.match(/\b((?:[1-3]\s)?[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)?)\s+(\d+):(\d+)(?:\s*-\s*(\d+))?\b/)) {
         textNodes.push(node as Text);
       }
     }
@@ -165,8 +178,8 @@ export function highlightReferencesInHtml(html: string): string {
     let cursor = 0;
 
     text.replace(
-      /\b((?:[1-3]\s)?[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)?)\s+(\d+):(\d+)\b/g,
-      (match, _book, _chapter, _verse, offset) => {
+      /\b((?:[1-3]\s)?[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)?)\s+(\d+):(\d+)(?:\s*-\s*(\d+))?\b/g,
+      (match, _book, _chapter, _verse, _rangeEnd, offset) => {
         const reference = getReferenceFromText(match);
 
         if (!reference) {
@@ -212,7 +225,7 @@ export function getReferenceFromText(text: string): DetectedReference | null {
 
 function highlightBibleReferences(text: string): string {
   return text.replace(
-    /\b((?:[1-3]\s)?[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)?)\s+(\d+):(\d+)\b/g,
+    /\b((?:[1-3]\s)?[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)?)\s+(\d+):(\d+)(?:\s*-\s*(\d+))?\b/g,
     (fullMatch) => {
       const reference = getReferenceFromText(fullMatch);
 
@@ -230,10 +243,18 @@ function resolveReferenceFromMatch(match: RegExpMatchArray): DetectedReference |
     return null;
   }
 
-  const label = `${match[1]} ${match[2]}:${match[3]}`;
+  const rangeSuffix = match[4] ? `-${match[4]}` : "";
+  const label = `${match[1]} ${match[2]}:${match[3]}${rangeSuffix}`;
   const reference = getReferenceFromText(label);
 
-  return reference ? { label: reference.label, osisId: reference.osisId } : null;
+  return reference
+    ? {
+      label: reference.label,
+      osisId: reference.osisId,
+      start: reference.start,
+      end: reference.end,
+    }
+    : null;
 }
 
 function toMarkAttributes(reference: DetectedReference) {

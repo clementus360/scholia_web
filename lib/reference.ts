@@ -80,11 +80,11 @@ const BOOK_PATTERN = BOOK_CANDIDATES
   .map((candidate) => escapeRegex(candidate).replace(/\s+/g, "\\s+"))
   .join("|");
 
-const REFERENCE_PATTERN = new RegExp(`\\b(${BOOK_PATTERN})\\s+(\\d+):(\\d+)\\b`, "i");
-const REFERENCE_PATTERN_GLOBAL = new RegExp(`\\b(${BOOK_PATTERN})\\s+(\\d+):(\\d+)\\b`, "gi");
+const REFERENCE_PATTERN = new RegExp(`\\b(${BOOK_PATTERN})\\s+(\\d+):(\\d+)(?:\\s*-\\s*(\\d+))?\\b`, "i");
+const REFERENCE_PATTERN_GLOBAL = new RegExp(`\\b(${BOOK_PATTERN})\\s+(\\d+):(\\d+)(?:\\s*-\\s*(\\d+))?\\b`, "gi");
 
 export function detectReference(text: string): DetectedReference | null {
-  const match = text.match(REFERENCE_PATTERN);
+  const match = REFERENCE_PATTERN.exec(text);
 
   if (!match) {
     return null;
@@ -92,16 +92,23 @@ export function detectReference(text: string): DetectedReference | null {
 
   const bookCandidate = match[1].trim();
   const chapter = Number(match[2]);
-  const verse = Number(match[3]);
+  const verseStart = Number(match[3]);
+  const verseEnd = match[4] ? Number(match[4]) : null;
   const book = resolveBook(bookCandidate);
 
-  if (!book || Number.isNaN(chapter) || Number.isNaN(verse)) {
+  if (!book || Number.isNaN(chapter) || Number.isNaN(verseStart) || (verseEnd !== null && Number.isNaN(verseEnd))) {
     return null;
   }
 
+  const versePart = verseEnd !== null ? `${verseStart}-${verseEnd}` : `${verseStart}`;
+  const start = match.index;
+  const end = start + match[0].length;
+
   return {
-    label: `${book.name} ${chapter}:${verse}`,
-    osisId: `${book.osis}.${chapter}.${verse}`,
+    label: `${book.name} ${chapter}:${versePart}`,
+    osisId: `${book.osis}.${chapter}.${versePart}`,
+    start,
+    end,
   };
 }
 
@@ -111,16 +118,28 @@ export function findReferenceMatches(text: string): DetectedReference[] {
   for (const match of text.matchAll(REFERENCE_PATTERN_GLOBAL)) {
     const bookCandidate = match[1].trim();
     const chapter = Number(match[2]);
-    const verse = Number(match[3]);
+    const verseStart = Number(match[3]);
+    const verseEnd = match[4] ? Number(match[4]) : null;
     const book = resolveBook(bookCandidate);
+    const start = match.index ?? -1;
 
-    if (!book || Number.isNaN(chapter) || Number.isNaN(verse)) {
+    if (
+      !book ||
+      Number.isNaN(chapter) ||
+      Number.isNaN(verseStart) ||
+      (verseEnd !== null && Number.isNaN(verseEnd)) ||
+      start < 0
+    ) {
       continue;
     }
 
+    const versePart = verseEnd !== null ? `${verseStart}-${verseEnd}` : `${verseStart}`;
+
     matches.push({
-      label: `${book.name} ${chapter}:${verse}`,
-      osisId: `${book.osis}.${chapter}.${verse}`,
+      label: `${book.name} ${chapter}:${versePart}`,
+      osisId: `${book.osis}.${chapter}.${versePart}`,
+      start,
+      end: start + match[0].length,
     });
   }
 

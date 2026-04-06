@@ -157,7 +157,7 @@ a {
 }
 
 .scholia-editor blockquote.verse-quote .verse-quote-reference {
-  display: block;
+  display: inline;
   text-align: center;
   font-size: 0.75rem;
   font-weight: 700;
@@ -167,8 +167,17 @@ a {
 }
 
 .scholia-editor blockquote.verse-quote .verse-quote-text {
+  display: inline;
   font-size: 1.1rem;
   line-height: 1.9;
+}
+
+.scholia-editor blockquote.verse-quote .verse-quote-number {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #c26b1f;
+  vertical-align: baseline;
+  margin-right: 0.3rem;
 }
 
 /* Quill editor wrapper */
@@ -281,12 +290,26 @@ a {
 }
 
 .quill-wrapper .ql-editor .verse-quote-reference {
-  margin: 0 0 0.35rem;
+  display: inline;
+  margin: 0 0.45rem 0 0;
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #a95f24;
+}
+
+.quill-wrapper .ql-editor .verse-quote-text {
+  display: inline;
+  margin: 0;
+}
+
+.quill-wrapper .ql-editor .verse-quote-number {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #c26b1f;
+  vertical-align: baseline;
+  margin-right: 0.3rem;
 }
 
 .quill-wrapper .ql-toolbar {

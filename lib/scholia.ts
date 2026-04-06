@@ -81,13 +81,36 @@ export async function deleteNote(noteId: number): Promise<void> {
 }
 
 export async function fetchVerseContext(osisId: string): Promise<VerseContext> {
-  const response = await apiFetch<VerseContext>(`/verse/${osisId}/context`);
+  const response = await apiFetch<VerseContext>(`/verse/${encodeURIComponent(osisId)}/context`);
 
   if (!response.data) {
     throw new Error("The API did not return verse context.");
   }
 
-  return response.data;
+  return normalizeVerseContext(response.data);
+}
+
+function normalizeVerseContext(context: VerseContext): VerseContext {
+  const normalized: VerseContext = {
+    ...context,
+    analysis: context.analysis ?? [],
+    lexicon: context.lexicon ?? [],
+    locations: context.locations ?? [],
+    people: context.people ?? [],
+    groups: context.groups ?? [],
+    events: context.events ?? [],
+    cross_references: context.cross_references ?? [],
+    notes: context.notes ?? [],
+  };
+
+  if ("verses" in normalized) {
+    return {
+      ...normalized,
+      analysis_by_verse: normalized.analysis_by_verse ?? {},
+    };
+  }
+
+  return normalized;
 }
 
 export async function fetchLexiconDetail(strongsId: string): Promise<LexiconDetail> {
