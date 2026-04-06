@@ -327,15 +327,34 @@ export function ScholiaStudio() {
       return;
     }
 
+    const requestSnapshot = serializeNoteForSave(note);
+
     setIsSaving(true);
     setNotesError(null);
 
     try {
       const saved = await updateNote(note);
-      lastSavedSnapshotRef.current = serializeNoteForSave(saved);
+      let appliedResponse = false;
+
       setNotes((current) =>
-        current.map((note) => (note.id === saved.id ? { ...note, ...saved } : note)),
+        current.map((currentNote) => {
+          if (currentNote.id !== saved.id) {
+            return currentNote;
+          }
+
+          // Ignore out-of-order responses when the local note has changed since this request was sent.
+          if (serializeNoteForSave(currentNote) !== requestSnapshot) {
+            return currentNote;
+          }
+
+          appliedResponse = true;
+          return { ...currentNote, ...saved };
+        }),
       );
+
+      if (appliedResponse) {
+        lastSavedSnapshotRef.current = serializeNoteForSave(saved);
+      }
     } catch (error) {
       setNotesError(error instanceof Error ? error.message : "Failed to save note.");
     } finally {
