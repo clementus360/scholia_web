@@ -326,6 +326,33 @@ a {
   color: #db6700 !important;
 }
 
+.structured-text p {
+  margin: 0;
+  white-space: normal;
+}
+
+.structured-text p + p {
+  margin-top: 0.75rem;
+}
+
+.structured-text .structured-reference {
+  display: inline-block;
+  color: #b25f16;
+  font-size: 0.68em;
+  font-weight: 700;
+  vertical-align: super;
+  letter-spacing: 0.02em;
+}
+
+.structured-text .structured-reference-separator {
+  display: inline-block;
+  color: #b25f16;
+  font-size: 0.68em;
+  font-weight: 700;
+  vertical-align: super;
+  letter-spacing: 0.02em;
+}
+
 .quill-wrapper .ql-toolbar {
   border: 0 !important;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;

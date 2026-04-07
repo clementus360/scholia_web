@@ -93,6 +93,7 @@ export function ScholiaStudio() {
   const [isNotesSidebarOpen, setIsNotesSidebarOpen] = useState(false);
   const [isContextSidebarOpen, setIsContextSidebarOpen] = useState(false);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
+  const [contextSidebarWidth, setContextSidebarWidth] = useState(360);
   const [lexiconDetails, setLexiconDetails] = useState<LexiconDetailsState>({});
   const [contextResult, setContextResult] = useState<ContextResult>({
     data: null,
@@ -103,6 +104,11 @@ export function ScholiaStudio() {
   const autosaveTimerRef = useRef<number | null>(null);
   const activeNoteRef = useRef<LocalNote | null>(null);
   const persistNoteRef = useRef<(note: LocalNote) => Promise<void>>(async () => { });
+  const contextResizeStateRef = useRef<{
+    startX: number;
+    startWidth: number;
+    cleanup: (() => void) | null;
+  } | null>(null);
 
   const activeNote = useMemo(
     () => notes.find((note) => note.id === activeNoteId) ?? null,
@@ -117,6 +123,44 @@ export function ScholiaStudio() {
     () => (contextResult.data?.lexicon ?? []).map((entry) => entry.strongs_id).join("|"),
     [contextResult.data?.lexicon],
   );
+
+  const beginContextSidebarResize = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isDesktopLayout) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const startX = event.clientX;
+    const startWidth = contextSidebarWidth;
+    const minWidth = 320;
+    const maxWidth = 620;
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const delta = startX - moveEvent.clientX;
+      const nextWidth = Math.min(maxWidth, Math.max(minWidth, startWidth + delta));
+      setContextSidebarWidth(nextWidth);
+    };
+
+    const handlePointerUp = () => {
+      contextResizeStateRef.current?.cleanup?.();
+      contextResizeStateRef.current = null;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp, { once: true });
+    window.addEventListener("pointercancel", handlePointerUp, { once: true });
+
+    contextResizeStateRef.current = {
+      startX,
+      startWidth,
+      cleanup: () => {
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+        window.removeEventListener("pointercancel", handlePointerUp);
+      },
+    };
+  }, [contextSidebarWidth, isDesktopLayout]);
 
   activeNoteRef.current = activeNote;
 
@@ -154,6 +198,22 @@ export function ScholiaStudio() {
 
     return () => {
       mediaQuery.removeEventListener("change", onChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isDesktopLayout) {
+      return;
+    }
+
+    contextResizeStateRef.current?.cleanup?.();
+    contextResizeStateRef.current = null;
+  }, [isDesktopLayout]);
+
+  useEffect(() => {
+    return () => {
+      contextResizeStateRef.current?.cleanup?.();
+      contextResizeStateRef.current = null;
     };
   }, []);
 
@@ -648,19 +708,22 @@ export function ScholiaStudio() {
         </section>
 
         {isDesktopLayout && isContextSidebarOpen ? (
-          <ContextRail
-            selectedReferenceLabel={selectedReferenceLabel}
-            verseLines={getVersePreviewLinesFromContext(contextResult.data)}
-            contextError={contextResult.error}
-            context={contextBody}
-            activeTab={activeTab}
-            onSelectTab={setActiveTab}
-            onInsertQuote={() => setInsertQuoteSignal((current) => current + 1)}
-            canInsertQuote={Boolean(selectedReferenceLabel && hasValidVerseData(contextResult.data))}
-            onToggleSidebar={() => setIsContextSidebarOpen(false)}
-            isOpen={isContextSidebarOpen}
-            mode="desktop"
-          />
+          <div className="relative h-full flex-shrink-0" style={{ width: contextSidebarWidth }}>
+            <ContextRail
+              selectedReferenceLabel={selectedReferenceLabel}
+              verseLines={getVersePreviewLinesFromContext(contextResult.data)}
+              contextError={contextResult.error}
+              context={contextBody}
+              activeTab={activeTab}
+              onSelectTab={setActiveTab}
+              onInsertQuote={() => setInsertQuoteSignal((current) => current + 1)}
+              canInsertQuote={Boolean(selectedReferenceLabel && hasValidVerseData(contextResult.data))}
+              onToggleSidebar={() => setIsContextSidebarOpen(false)}
+              isOpen={isContextSidebarOpen}
+              mode="desktop"
+              onResizeStart={beginContextSidebarResize}
+            />
+          </div>
         ) : null}
       </div>
 
@@ -931,6 +994,7 @@ function ContextRail({
   onToggleSidebar,
   isOpen,
   mode,
+  onResizeStart,
 }: {
   selectedReferenceLabel: string | null;
   verseLines: VersePreviewLine[];
@@ -943,11 +1007,12 @@ function ContextRail({
   onToggleSidebar: () => void;
   isOpen: boolean;
   mode: "desktop" | "mobile";
+  onResizeStart?: (event: React.PointerEvent<HTMLButtonElement>) => void;
 }) {
   const railClassName =
     mode === "mobile"
       ? "h-full overflow-y-auto border-l border-black/6 bg-white px-4 py-5"
-      : "w-full border-t border-black/6 bg-white px-4 py-5 lg:w-[320px] lg:border-l lg:border-t-0 lg:px-4 lg:py-5 lg:overflow-y-auto";
+      : "relative h-full w-full overflow-hidden border-t border-black/6 bg-white lg:border-l lg:border-t-0";
 
   if (!selectedReferenceLabel) {
     return (
@@ -976,73 +1041,84 @@ function ContextRail({
 
   return (
     <aside className={railClassName}>
-      <div className="mb-4 flex justify-end">
+      {mode === "desktop" && onResizeStart ? (
         <button
           type="button"
-          onClick={onToggleSidebar}
-          aria-label={isOpen ? "Hide context sidebar" : "Show context sidebar"}
-          title={isOpen ? "Hide context sidebar" : "Show context sidebar"}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-black/8 bg-white text-[#7b6d5c] transition hover:bg-[#f8f5f0]"
-        >
-          <SidebarToggleIcon side="right" isOpen={isOpen} />
-        </button>
-      </div>
-      <div className="rounded-3xl border border-black/6 bg-[#fffdf9] p-4">
-        <p className="text-sm text-[#2e2317]">Scripture</p>
-        <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#17120e]">{selectedReferenceLabel}</h2>
+          aria-label="Resize context sidebar"
+          title="Drag to resize context sidebar"
+          onPointerDown={onResizeStart}
+          className="absolute inset-y-0 left-0 z-20 w-3 cursor-col-resize bg-transparent transition hover:bg-[#db6700]/10"
+        />
+      ) : null}
+      <div className="flex h-full min-h-0 flex-col overflow-y-auto px-4 py-5 lg:px-4 lg:py-5">
+        <div className="mb-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            aria-label={isOpen ? "Hide context sidebar" : "Show context sidebar"}
+            title={isOpen ? "Hide context sidebar" : "Show context sidebar"}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-black/8 bg-white text-[#7b6d5c] transition hover:bg-[#f8f5f0]"
+          >
+            <SidebarToggleIcon side="right" isOpen={isOpen} />
+          </button>
+        </div>
+        <div className="rounded-3xl border border-black/6 bg-[#fffdf9] p-4">
+          <p className="text-sm text-[#2e2317]">Scripture</p>
+          <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#17120e]">{selectedReferenceLabel}</h2>
 
-        <div className="mt-4 rounded-[14px] bg-[#fae7d2] px-4 py-3 text-sm leading-6 text-[#3c2d1f]">
-          {verseLines.length > 0 ? (
-            <div className="space-y-3">
-              {verseLines.map((verseLine) => (
-                <p key={verseLine.key}>
-                  <span className="mr-2 align-top text-[0.72rem] font-semibold text-[#c26b1f]">{verseLine.verseNumber}</span>
-                  {verseLine.text}
-                </p>
-              ))}
-            </div>
-          ) : (
-            "The selected verse will appear here together with its study context."
-          )}
+          <div className="mt-4 rounded-[14px] bg-[#fae7d2] px-4 py-3 text-sm leading-6 text-[#3c2d1f]">
+            {verseLines.length > 0 ? (
+              <div className="space-y-3">
+                {verseLines.map((verseLine) => (
+                  <p key={verseLine.key}>
+                    <span className="mr-2 align-top text-[0.72rem] font-semibold text-[#c26b1f]">{verseLine.verseNumber}</span>
+                    {verseLine.text}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              "The selected verse will appear here together with its study context."
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={onInsertQuote}
+            disabled={!canInsertQuote}
+            className="mt-3 flex w-full items-center justify-center rounded-full bg-[#db6700] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#bf5b00] disabled:cursor-not-allowed disabled:bg-[#d8c8b8]"
+          >
+            Insert quote
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={onInsertQuote}
-          disabled={!canInsertQuote}
-          className="mt-3 flex w-full items-center justify-center rounded-full bg-[#db6700] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#bf5b00] disabled:cursor-not-allowed disabled:bg-[#d8c8b8]"
-        >
-          Insert quote
-        </button>
-      </div>
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-[#2b2218]">Context</h3>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {contextTabs.map((tab) => {
+              const selected = tab.key === activeTab;
 
-      <div className="mt-6">
-        <h3 className="text-sm font-semibold text-[#2b2218]">Context</h3>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {contextTabs.map((tab) => {
-            const selected = tab.key === activeTab;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => onSelectTab(tab.key)}
+                  className={`rounded-md border px-3 py-2 text-left transition ${selected
+                    ? "border-transparent bg-[#db6700] text-white"
+                    : "border-black/8 bg-white text-[#5e5142] hover:border-[#e8d7c6] hover:bg-[#fff8f1]"
+                    }`}
+                >
+                  <span className="block text-sm font-semibold leading-tight">{tab.label}</span>
+                  <span className={`mt-0.5 block text-[11px] leading-tight ${selected ? "text-white/85" : "text-[#8b7d6d]"}`}>
+                    {tab.description}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => onSelectTab(tab.key)}
-                className={`rounded-md border px-3 py-2 text-left transition ${selected
-                  ? "border-transparent bg-[#db6700] text-white"
-                  : "border-black/8 bg-white text-[#5e5142] hover:border-[#e8d7c6] hover:bg-[#fff8f1]"
-                  }`}
-              >
-                <span className="block text-sm font-semibold leading-tight">{tab.label}</span>
-                <span className={`mt-0.5 block text-[11px] leading-tight ${selected ? "text-white/85" : "text-[#8b7d6d]"}`}>
-                  {tab.description}
-                </span>
-              </button>
-            );
-          })}
+          {contextError ? <p className="mt-3 text-sm text-[#a53e1f]">{contextError}</p> : null}
+          <div className="mt-4">{context}</div>
         </div>
-
-        {contextError ? <p className="mt-3 text-sm text-[#a53e1f]">{contextError}</p> : null}
-        <div className="mt-4">{context}</div>
       </div>
     </aside>
   );
@@ -1148,7 +1224,8 @@ function renderContextBody(activeTab: ContextTabKey, context: VerseContext, lexi
       <div className="space-y-3">
         {context.locations.length > 0 ? (
           context.locations.map((location) => {
-            const profile = buildLocationProfile(location.source_info);
+            const sourceHtml = formatStructuredTextHtml(location.source_info);
+            const sourceReferences = extractLinkedReferences(location.source_info).slice(0, 20);
 
             return (
               <section key={location.id} className="overflow-hidden rounded-[18px] border border-black/6 bg-[#fff8f2]">
@@ -1176,6 +1253,9 @@ function renderContextBody(activeTab: ContextTabKey, context: VerseContext, lexi
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-[#7b6045]">
+                      ID: {location.id}
+                    </span>
                     {location.geometry_type ? (
                       <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-[#7b6045]">
                         {location.geometry_type}
@@ -1199,27 +1279,11 @@ function renderContextBody(activeTab: ContextTabKey, context: VerseContext, lexi
                     </div>
                   </div>
 
-                  <div className="mt-3 rounded-[14px] bg-white/80 px-3 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#b06b36]">Overview</p>
-                    <p className="mt-1 text-sm leading-6 text-[#3e352c]">{profile.overview}</p>
-                  </div>
-
-                  {profile.highlights.length > 0 ? (
-                    <ul className="mt-3 space-y-1.5 rounded-[14px] bg-white/80 px-3 py-3 text-sm leading-6 text-[#4a3d30]">
-                      {profile.highlights.map((highlight) => (
-                        <li key={`${location.id}-${highlight.slice(0, 24)}`} className="flex gap-2">
-                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#db6700]" />
-                          <span>{highlight}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-
-                  {profile.references.length > 0 ? (
+                  {sourceReferences.length > 0 ? (
                     <div className="mt-3 rounded-[14px] border border-black/8 bg-white/70 px-3 py-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7b6d5c]">References mentioned</p>
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {profile.references.map((reference) => (
+                        {sourceReferences.map((reference) => (
                           <span
                             key={`${location.id}-${reference}`}
                             className="rounded-full bg-[#fff6ec] px-2.5 py-1 text-[11px] font-medium text-[#7b6045]"
@@ -1231,6 +1295,39 @@ function renderContextBody(activeTab: ContextTabKey, context: VerseContext, lexi
                     </div>
                   ) : null}
 
+                  <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-[#6f6458]">
+                    {location.source_info ? (
+                      <div className="rounded-[14px] bg-white px-3 py-2">
+                        <p className="text-[#a09082]">Source Info Length</p>
+                        <p className="mt-1 font-medium text-[#241d17]">{location.source_info.length} chars</p>
+                      </div>
+                    ) : null}
+                    {location.image_author ? (
+                      <div className="rounded-[14px] bg-white px-3 py-2">
+                        <p className="text-[#a09082]">Image Author</p>
+                        <p className="mt-1 font-medium text-[#241d17]">{location.image_author}</p>
+                      </div>
+                    ) : null}
+                    {location.image_file ? (
+                      <div className="rounded-[14px] bg-white px-3 py-2">
+                        <p className="text-[#a09082]">Image File</p>
+                        <p className="mt-1 break-all font-medium text-[#241d17]">{location.image_file}</p>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 rounded-[14px] border border-black/8 bg-white/70 px-3 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7b6d5c]">Source Notes</p>
+                    {sourceHtml ? (
+                      <div
+                        className="structured-text mt-2 text-sm leading-6 text-[#4a3d30]"
+                        dangerouslySetInnerHTML={{ __html: sourceHtml }}
+                      />
+                    ) : (
+                      <p className="mt-2 text-sm text-[#7f7367]">No source notes available.</p>
+                    )}
+                  </div>
+
                   {location.credit_url ? (
                     <a
                       href={location.credit_url}
@@ -1241,11 +1338,6 @@ function renderContextBody(activeTab: ContextTabKey, context: VerseContext, lexi
                       Image credit
                     </a>
                   ) : null}
-
-                  <details className="mt-3 rounded-[14px] border border-black/8 bg-white/60 px-3 py-2 text-xs text-[#6f6458]">
-                    <summary className="cursor-pointer font-medium text-[#7a6d5f]">Show full location entry</summary>
-                    <p className="mt-2 whitespace-pre-wrap leading-5 text-[#5f554b]">{profile.fullText}</p>
-                  </details>
                 </div>
               </section>
             );
@@ -1282,7 +1374,8 @@ function renderContextBody(activeTab: ContextTabKey, context: VerseContext, lexi
       <div className="space-y-3">
         {context.people.length > 0 ? (
           context.people.map((person) => {
-            const profile = buildPersonProfile(person.dictionary_text);
+            const dictionaryHtml = formatStructuredTextHtml(person.dictionary_text);
+            const dictionaryReferences = extractLinkedReferences(person.dictionary_text).slice(0, 20);
 
             return (
               <section key={person.id} className="rounded-[18px] border border-black/6 bg-[#fff8f2] p-4">
@@ -1296,6 +1389,13 @@ function renderContextBody(activeTab: ContextTabKey, context: VerseContext, lexi
                   </span>
                 </div>
 
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-[#7b6045]">ID: {person.id}</span>
+                  {person.slug ? (
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-[#7b6045]">Slug: {person.slug}</span>
+                  ) : null}
+                </div>
+
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[#6f6458]">
                   <div className="rounded-[14px] bg-white px-3 py-2">
                     <p className="text-[#a09082]">Birth</p>
@@ -1307,27 +1407,16 @@ function renderContextBody(activeTab: ContextTabKey, context: VerseContext, lexi
                   </div>
                 </div>
 
-                <div className="mt-3 rounded-[14px] bg-white/80 px-3 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#b06b36]">Overview</p>
-                  <p className="mt-1 text-sm leading-6 text-[#3e352c]">{profile.overview}</p>
+                <div className="mt-3 rounded-[14px] bg-white px-3 py-2 text-xs text-[#6f6458]">
+                  <p className="text-[#a09082]">Lookup Name</p>
+                  <p className="mt-1 font-medium text-[#241d17]">{person.lookup_name || "—"}</p>
                 </div>
 
-                {profile.highlights.length > 0 ? (
-                  <ul className="mt-3 space-y-1.5 rounded-[14px] bg-white/80 px-3 py-3 text-sm leading-6 text-[#4a3d30]">
-                    {profile.highlights.map((highlight) => (
-                      <li key={`${person.id}-${highlight.slice(0, 24)}`} className="flex gap-2">
-                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#db6700]" />
-                        <span>{highlight}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-
-                {profile.references.length > 0 ? (
+                {dictionaryReferences.length > 0 ? (
                   <div className="mt-3 rounded-[14px] border border-black/8 bg-white/70 px-3 py-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7b6d5c]">References mentioned</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {profile.references.map((reference) => (
+                      {dictionaryReferences.map((reference) => (
                         <span
                           key={`${person.id}-${reference}`}
                           className="rounded-full bg-[#fff6ec] px-2.5 py-1 text-[11px] font-medium text-[#7b6045]"
@@ -1339,10 +1428,17 @@ function renderContextBody(activeTab: ContextTabKey, context: VerseContext, lexi
                   </div>
                 ) : null}
 
-                <details className="mt-3 rounded-[14px] border border-black/8 bg-white/60 px-3 py-2 text-xs text-[#6f6458]">
-                  <summary className="cursor-pointer font-medium text-[#7a6d5f]">Show full dictionary entry</summary>
-                  <p className="mt-2 whitespace-pre-wrap leading-5 text-[#5f554b]">{profile.fullText}</p>
-                </details>
+                <div className="mt-3 rounded-[14px] border border-black/8 bg-white/70 px-3 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7b6d5c]">Dictionary Entry</p>
+                  {dictionaryHtml ? (
+                    <div
+                      className="structured-text mt-2 text-sm leading-6 text-[#4a3d30]"
+                      dangerouslySetInnerHTML={{ __html: dictionaryHtml }}
+                    />
+                  ) : (
+                    <p className="mt-2 text-sm text-[#7f7367]">No dictionary entry available.</p>
+                  )}
+                </div>
               </section>
             );
           })
@@ -1515,84 +1611,52 @@ function formatCoordinate(value: number | undefined, axis: "lat" | "lng"): strin
   return `${absolute} ${value >= 0 ? "E" : "W"}`;
 }
 
-function buildLocationProfile(sourceInfo: string): {
-  overview: string;
-  highlights: string[];
-  references: string[];
-  fullText: string;
-} {
-  const fullText = cleanDictionaryText(sourceInfo);
-  const sentences = splitReadableSentences(fullText);
-  const overview = pickOverviewSentence(sentences, fullText || "No location notes available.");
-  const highlights = sentences
-    .filter((sentence) => sentence !== overview)
-    .map(simplifyProfileSentence)
-    .filter((sentence) => sentence.length >= 28 && sentence.length <= 180)
-    .slice(0, 4);
-  const references = extractLinkedReferences(sourceInfo).slice(0, 10);
-
-  return {
-    overview,
-    highlights,
-    references,
-    fullText: fullText || "No location notes available.",
-  };
-}
-
-function buildPersonProfile(dictionaryText: string): {
-  overview: string;
-  highlights: string[];
-  references: string[];
-  fullText: string;
-} {
-  const fullText = cleanDictionaryText(dictionaryText);
-  const sentences = splitReadableSentences(fullText);
-  const overview = pickOverviewSentence(sentences, fullText);
-  const highlights = sentences
-    .filter((sentence) => sentence !== overview)
-    .map(simplifyProfileSentence)
-    .filter((sentence) => sentence.length >= 30 && sentence.length <= 180)
-    .slice(0, 4);
-  const references = extractLinkedReferences(dictionaryText).slice(0, 10);
-
-  return {
-    overview,
-    highlights,
-    references,
-    fullText,
-  };
-}
-
 function cleanDictionaryText(value: string): string {
   return value
     .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
-    .replace(/\s+/g, " ")
     .replace(/\.{2,}/g, ".")
     .trim();
 }
 
-function splitReadableSentences(value: string): string[] {
-  return value
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length >= 12);
-}
+function formatStructuredTextHtml(value: string): string {
+  const cleaned = cleanDictionaryText(value).replace(/\r\n/g, "\n");
 
-function pickOverviewSentence(sentences: string[], fallback: string): string {
-  for (const sentence of sentences) {
-    if (sentence.length >= 40 && sentence.length <= 220) {
-      return sentence;
-    }
+  if (!cleaned) {
+    return "";
   }
 
-  return fallback.length > 220 ? `${fallback.slice(0, 220)}...` : fallback || "No description available.";
+  const paragraphs = cleaned
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  const blocks = paragraphs.length > 0 ? paragraphs : cleaned.split(/\n+/).map((paragraph) => paragraph.trim()).filter(Boolean);
+
+  return blocks
+    .map((paragraph) => {
+      const normalizedWhitespace = paragraph.replace(/\s+/g, " ");
+      const escaped = escapeHtml(normalizedWhitespace);
+      const withReferences = escaped.replace(
+        /\(?((?:[1-3]\s*)?[A-Z][a-z]{1,6}\.?(?:\s+[A-Z][a-z]{1,6}\.?)?\s+\d+:\d+(?:-\d+)?(?:,\s*\d+(?:-\d+)?)*(?:;\s*\d+:\d+(?:-\d+)?(?:,\s*\d+(?:-\d+)?)*)*)\)?/g,
+        (match) => `<sup class="structured-reference">${match}</sup>`,
+      );
+      const withStyledSeparators = withReferences.replace(
+        /(<sup class="structured-reference">[^<]+<\/sup>)(;)/g,
+        '$1<sup class="structured-reference-separator">$2</sup>',
+      );
+
+      return `<p>${withStyledSeparators}</p>`;
+    })
+    .join("");
 }
 
-function simplifyProfileSentence(value: string): string {
+function escapeHtml(value: string): string {
   return value
-    .replace(/^this\s+(?:is|name denotes|means)\s+/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function extractLinkedReferences(dictionaryText: string): string[] {
