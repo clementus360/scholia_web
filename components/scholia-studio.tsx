@@ -26,13 +26,14 @@ type LexiconDetailsState = Record<
 const contextTabs: Array<{
   key: ContextTabKey;
   label: string;
+  description: string;
 }> = [
-    { key: "lexicon", label: "Lexicon" },
-    { key: "geography", label: "Geography" },
-    { key: "history", label: "History" },
-    { key: "people", label: "People" },
-    { key: "events", label: "Events" },
-    { key: "crossReferences", label: "Cross Refs" },
+    { key: "lexicon", label: "Lexicon", description: "Word meaning" },
+    { key: "geography", label: "Geography", description: "Places and maps" },
+    { key: "history", label: "History", description: "Groups and setting" },
+    { key: "people", label: "People", description: "Key persons" },
+    { key: "events", label: "Events", description: "Timeline moments" },
+    { key: "crossReferences", label: "Cross Refs", description: "Related passages" },
   ];
 
 /**
@@ -1026,12 +1027,15 @@ function ContextRail({
                 key={tab.key}
                 type="button"
                 onClick={() => onSelectTab(tab.key)}
-                className={`rounded-md border px-3 py-2 text-left text-sm font-medium transition ${selected
+                className={`rounded-md border px-3 py-2 text-left transition ${selected
                   ? "border-transparent bg-[#db6700] text-white"
                   : "border-black/8 bg-white text-[#5e5142] hover:border-[#e8d7c6] hover:bg-[#fff8f1]"
                   }`}
               >
-                {tab.label}
+                <span className="block text-sm font-semibold leading-tight">{tab.label}</span>
+                <span className={`mt-0.5 block text-[11px] leading-tight ${selected ? "text-white/85" : "text-[#8b7d6d]"}`}>
+                  {tab.description}
+                </span>
               </button>
             );
           })}
