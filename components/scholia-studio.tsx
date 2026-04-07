@@ -5,7 +5,16 @@ import Image from "next/image";
 import { findReferenceMatches, formatReferenceLabel } from "@/lib/reference";
 import { RichNoteEditor } from "@/components/rich-note-editor";
 import { stripHtml } from "@/lib/editor";
-import { createNote, deleteNote, fetchLexiconDetail, fetchNotes, fetchVerseContext, updateNote } from "@/lib/scholia";
+import {
+  createNote,
+  deleteNote,
+  exchangeInviteCode,
+  fetchAuthMe,
+  fetchLexiconDetail,
+  fetchNotes,
+  fetchVerseContext,
+  updateNote,
+} from "@/lib/scholia";
 import type { ContextTabKey, LexiconDetail, LexiconOccurrence, LocalNote, VerseContext } from "@/lib/types";
 
 type ContextResult = {
@@ -35,6 +44,8 @@ const contextTabs: Array<{
     { key: "events", label: "Events", description: "Timeline moments" },
     { key: "crossReferences", label: "Cross Refs", description: "Related passages" },
   ];
+
+const API_KEY_STORAGE_KEY = "scholia_api_key";
 
 /**
  * Check if a VerseContext has valid verse data (either single or range)
@@ -90,6 +101,11 @@ export function ScholiaStudio() {
   const [isLoadingNotes, setIsLoadingNotes] = useState(true);
   const [notesError, setNotesError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [inviteCode, setInviteCode] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isExchangingCode, setIsExchangingCode] = useState(false);
   const [isNotesSidebarOpen, setIsNotesSidebarOpen] = useState(false);
   const [isContextSidebarOpen, setIsContextSidebarOpen] = useState(false);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
@@ -219,10 +235,69 @@ export function ScholiaStudio() {
 
   useEffect(() => {
     let isActive = true;
+    const storedKey = window.localStorage.getItem(API_KEY_STORAGE_KEY);
+
+    if (!storedKey) {
+      setIsCheckingAuth(false);
+      return () => {
+        isActive = false;
+      };
+    }
+
+    void fetchAuthMe(storedKey)
+      .then(() => {
+        if (!isActive) {
+          return;
+        }
+
+        setApiKey(storedKey);
+        setAuthError(null);
+      })
+      .catch((error: unknown) => {
+        if (!isActive) {
+          return;
+        }
+
+        window.localStorage.removeItem(API_KEY_STORAGE_KEY);
+        setApiKey(null);
+        setAuthError(error instanceof Error ? error.message : "Invalid or expired API key.");
+      })
+      .finally(() => {
+        if (!isActive) {
+          return;
+        }
+
+        setIsCheckingAuth(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    if (isCheckingAuth) {
+      setIsLoadingNotes(true);
+      return () => {
+        isActive = false;
+      };
+    }
+
+    if (!apiKey) {
+      setNotes([]);
+      setActiveNoteId(null);
+      setIsLoadingNotes(false);
+      return () => {
+        isActive = false;
+      };
+    }
+
     setIsLoadingNotes(true);
     setNotesError(null);
 
-    fetchNotes()
+    fetchNotes(apiKey)
       .then((loadedNotes) => {
         if (!isActive) {
           return;
@@ -252,7 +327,7 @@ export function ScholiaStudio() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [apiKey, isCheckingAuth]);
 
   useEffect(() => {
     setSelectedVerseId(null);
@@ -283,7 +358,14 @@ export function ScholiaStudio() {
       error: null,
     }));
 
-    fetchVerseContext(selectedVerseId)
+    if (!apiKey) {
+      setContextResult({ data: null, loading: false, error: "Please sign in to load verse context." });
+      return () => {
+        isActive = false;
+      };
+    }
+
+    fetchVerseContext(selectedVerseId, apiKey)
       .then((data) => {
         if (!isActive) {
           return;
@@ -306,7 +388,7 @@ export function ScholiaStudio() {
     return () => {
       isActive = false;
     };
-  }, [selectedVerseId]);
+  }, [apiKey, selectedVerseId]);
 
   useEffect(() => {
     const entries = contextResult.data?.lexicon ?? [];
@@ -335,7 +417,7 @@ export function ScholiaStudio() {
         };
       });
 
-      void fetchLexiconDetail(strongsId)
+      void fetchLexiconDetail(strongsId, apiKey ?? undefined)
         .then((data) => {
           if (isCancelled) {
             return;
@@ -369,13 +451,53 @@ export function ScholiaStudio() {
     return () => {
       isCancelled = true;
     };
-  }, [lexiconSignature, contextResult.data?.lexicon]);
+  }, [apiKey, lexiconSignature, contextResult.data?.lexicon]);
+
+  const handleExchangeCode = async () => {
+    const trimmedCode = inviteCode.trim();
+
+    if (!trimmedCode) {
+      setAuthError("Enter your invite code.");
+      return;
+    }
+
+    setAuthError(null);
+    setIsExchangingCode(true);
+
+    try {
+      const exchangedApiKey = await exchangeInviteCode(trimmedCode);
+      await fetchAuthMe(exchangedApiKey);
+
+      window.localStorage.setItem(API_KEY_STORAGE_KEY, exchangedApiKey);
+      setApiKey(exchangedApiKey);
+      setInviteCode("");
+      setAuthError(null);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Failed to exchange invite code.");
+    } finally {
+      setIsExchangingCode(false);
+    }
+  };
+
+  const handleSignOut = () => {
+    window.localStorage.removeItem(API_KEY_STORAGE_KEY);
+    setApiKey(null);
+    setNotes([]);
+    setActiveNoteId(null);
+    setSelectedVerseId(null);
+    setAuthError(null);
+  };
 
   const handleCreateNote = async () => {
+    if (!apiKey) {
+      setAuthError("Please sign in to create notes.");
+      return;
+    }
+
     setNotesError(null);
 
     try {
-      const created = await createNote();
+      const created = await createNote(apiKey);
       setNotes((current) => [created, ...current]);
       setActiveNoteId(created.id);
     } catch (error) {
@@ -384,6 +506,11 @@ export function ScholiaStudio() {
   };
 
   const handleDeleteActiveNote = async () => {
+    if (!apiKey) {
+      setAuthError("Please sign in to delete notes.");
+      return;
+    }
+
     if (!notePendingDeletion) {
       return;
     }
@@ -391,7 +518,7 @@ export function ScholiaStudio() {
     setNotesError(null);
 
     try {
-      await deleteNote(notePendingDeletion.id);
+      await deleteNote(notePendingDeletion.id, apiKey);
 
       setNotes((current) => {
         const remaining = current.filter((note) => note.id !== notePendingDeletion.id);
@@ -428,6 +555,10 @@ export function ScholiaStudio() {
   };
 
   const persistNote = useCallback(async (note: LocalNote) => {
+    if (!apiKey) {
+      return;
+    }
+
     if (!note) {
       return;
     }
@@ -438,7 +569,7 @@ export function ScholiaStudio() {
     setNotesError(null);
 
     try {
-      const saved = await updateNote(note);
+      const saved = await updateNote(note, apiKey);
       let appliedResponse = false;
 
       setNotes((current) =>
@@ -465,7 +596,7 @@ export function ScholiaStudio() {
     } finally {
       setIsSaving(false);
     }
-  }, []);
+  }, [apiKey]);
 
   useEffect(() => {
     persistNoteRef.current = persistNote;
@@ -568,6 +699,61 @@ export function ScholiaStudio() {
     }
   };
 
+  if (isCheckingAuth) {
+    return (
+      <main className="h-dvh w-full p-0">
+        <div className="flex h-full w-full items-center justify-center rounded-none border border-black/6 bg-white/72 text-[#6d6357] backdrop-blur-md">
+          Checking access...
+        </div>
+      </main>
+    );
+  }
+
+  if (!apiKey) {
+    return (
+      <main className="h-dvh w-full p-0">
+        <div className="flex h-full w-full items-center justify-center bg-[#fcfaf7] px-4 py-6">
+          <section className="w-full max-w-md rounded-[24px] border border-black/8 bg-white p-6 shadow-[0_14px_34px_rgba(97,58,12,0.12)]">
+            <p className="text-xs uppercase tracking-[0.22em] text-[#b06b36]">Scholia Access</p>
+            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-[#1d1813]">Enter invite code</h1>
+            <p className="mt-2 text-sm leading-6 text-[#6f6458]">
+              Each API key maps notes to one user account. Sign in once to keep your notes private.
+            </p>
+
+            <div className="mt-5 space-y-3">
+              <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-[#8c7b6a]" htmlFor="invite-code-input">
+                Invite code
+              </label>
+              <input
+                id="invite-code-input"
+                value={inviteCode}
+                onChange={(event) => setInviteCode(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void handleExchangeCode();
+                  }
+                }}
+                placeholder="Paste your one-time code"
+                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-[#1d1813] outline-none placeholder:text-[#9d9285] focus:border-[#db6700]"
+              />
+              <button
+                type="button"
+                onClick={() => void handleExchangeCode()}
+                disabled={isExchangingCode}
+                className="inline-flex w-full items-center justify-center rounded-xl bg-[#db6700] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#bf5b00] disabled:cursor-not-allowed disabled:bg-[#d7b998]"
+              >
+                {isExchangingCode ? "Verifying code..." : "Continue"}
+              </button>
+            </div>
+
+            {authError ? <p className="mt-3 text-sm text-[#a53e1f]">{authError}</p> : null}
+          </section>
+        </div>
+      </main>
+    );
+  }
+
   if (isLoadingNotes) {
     return (
       <main className="h-dvh w-full p-0">
@@ -628,6 +814,13 @@ export function ScholiaStudio() {
                 />
 
                 <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="rounded-full border border-black/8 bg-white px-3 py-1 text-xs font-medium text-[#8a7f74] transition hover:bg-[#f8f5f0]"
+                  >
+                    Sign out
+                  </button>
                   <span className="flex items-center justify-center rounded-full border border-black/8 bg-white px-3 py-1 text-xs font-medium text-[#8a7f74]">
                     Updated {formatDate(activeNote.updatedAt)}
                   </span>

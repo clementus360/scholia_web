@@ -11,10 +11,58 @@ type NotePayload = {
   verse_ids: string[];
 };
 
-const WRITE_API_KEY = process.env.NEXT_PUBLIC_SCHOLIA_API_KEY ?? "scholia-dev";
+type AuthMe = {
+  subject?: string;
+  user_id?: string;
+  scopes?: string[];
+};
 
-export async function fetchNotes(): Promise<LocalNote[]> {
-  const response = await apiFetch<NotesData>("/notes?limit=100&offset=0");
+type ExchangeCodeResponse = {
+  api_key?: string;
+  apiKey?: string;
+  key?: string;
+};
+
+function requireApiKey(apiKey: string | null | undefined): string {
+  const trimmed = apiKey?.trim();
+
+  if (!trimmed) {
+    throw new Error("Missing API key. Please sign in with an invite code.");
+  }
+
+  return trimmed;
+}
+
+export async function fetchAuthMe(apiKey: string): Promise<AuthMe> {
+  const response = await apiFetch<AuthMe>("/auth/me", {}, requireApiKey(apiKey));
+
+  if (!response.data) {
+    throw new Error("The API did not return auth profile data.");
+  }
+
+  return response.data;
+}
+
+export async function exchangeInviteCode(code: string): Promise<string> {
+  const response = await apiFetch<ExchangeCodeResponse>(
+    "/auth/exchange-code",
+    {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    },
+  );
+
+  const apiKey = response.data?.api_key ?? response.data?.apiKey ?? response.data?.key;
+
+  if (!apiKey) {
+    throw new Error("The API did not return an API key.");
+  }
+
+  return apiKey;
+}
+
+export async function fetchNotes(apiKey: string): Promise<LocalNote[]> {
+  const response = await apiFetch<NotesData>("/notes?limit=100&offset=0", {}, requireApiKey(apiKey));
   const notes = (response.data ?? []).map(mapNoteToLocal);
 
   return notes.sort((left, right) => {
@@ -22,7 +70,7 @@ export async function fetchNotes(): Promise<LocalNote[]> {
   });
 }
 
-export async function createNote(): Promise<LocalNote> {
+export async function createNote(apiKey: string): Promise<LocalNote> {
   const payload: NotePayload = {
     title: "Untitled Note",
     main_reference: "",
@@ -36,7 +84,7 @@ export async function createNote(): Promise<LocalNote> {
       method: "POST",
       body: JSON.stringify(payload),
     },
-    WRITE_API_KEY,
+    requireApiKey(apiKey),
   );
 
   if (!response.data) {
@@ -46,7 +94,7 @@ export async function createNote(): Promise<LocalNote> {
   return mapNoteToLocal(response.data);
 }
 
-export async function updateNote(note: LocalNote): Promise<LocalNote> {
+export async function updateNote(note: LocalNote, apiKey: string): Promise<LocalNote> {
   const payload: NotePayload = {
     title: note.title.trim() || "Untitled Note",
     main_reference: note.referenceHint ?? note.verseIds[0] ?? "",
@@ -60,7 +108,7 @@ export async function updateNote(note: LocalNote): Promise<LocalNote> {
       method: "PUT",
       body: JSON.stringify(payload),
     },
-    WRITE_API_KEY,
+    requireApiKey(apiKey),
   );
 
   if (!response.data) {
@@ -70,18 +118,18 @@ export async function updateNote(note: LocalNote): Promise<LocalNote> {
   return mapNoteToLocal(response.data);
 }
 
-export async function deleteNote(noteId: number): Promise<void> {
+export async function deleteNote(noteId: number, apiKey: string): Promise<void> {
   await apiFetch<null>(
     `/notes/${noteId}`,
     {
       method: "DELETE",
     },
-    WRITE_API_KEY,
+    requireApiKey(apiKey),
   );
 }
 
-export async function fetchVerseContext(osisId: string): Promise<VerseContext> {
-  const response = await apiFetch<VerseContext>(`/verse/${encodeURIComponent(osisId)}/context`);
+export async function fetchVerseContext(osisId: string, apiKey?: string): Promise<VerseContext> {
+  const response = await apiFetch<VerseContext>(`/verse/${encodeURIComponent(osisId)}/context`, {}, apiKey);
 
   if (!response.data) {
     throw new Error("The API did not return verse context.");
@@ -113,9 +161,11 @@ function normalizeVerseContext(context: VerseContext): VerseContext {
   return normalized;
 }
 
-export async function fetchLexiconDetail(strongsId: string): Promise<LexiconDetail> {
+export async function fetchLexiconDetail(strongsId: string, apiKey?: string): Promise<LexiconDetail> {
   const response = await apiFetch<LexiconDetail | { entry?: Partial<LexiconDetail>; occurrences?: LexiconDetail["occurrences"] }>(
     `/lexicon/${encodeURIComponent(strongsId)}`,
+    {},
+    apiKey,
   );
 
   if (!response.data) {
