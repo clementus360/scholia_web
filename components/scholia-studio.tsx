@@ -47,6 +47,19 @@ const contextTabs: Array<{
 
 const API_KEY_STORAGE_KEY = "scholia_api_key";
 
+function isAuthFailureMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes("invalid") ||
+    normalized.includes("expired") ||
+    normalized.includes("unauthorized") ||
+    normalized.includes("forbidden") ||
+    normalized.includes("missing api key") ||
+    normalized.includes("authentication")
+  );
+}
+
 /**
  * Check if a VerseContext has valid verse data (either single or range)
  */
@@ -244,31 +257,47 @@ export function ScholiaStudio() {
       };
     }
 
-    void fetchAuthMe(storedKey)
-      .then(() => {
-        if (!isActive) {
-          return;
-        }
+    const bootstrapAuth = async () => {
+      let lastError: unknown = null;
 
-        setApiKey(storedKey);
-        setAuthError(null);
-      })
-      .catch((error: unknown) => {
-        if (!isActive) {
-          return;
-        }
+      // Retry a couple of times because Render cold starts can fail initial requests.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          await fetchAuthMe(storedKey);
 
+          if (!isActive) {
+            return;
+          }
+
+          setApiKey(storedKey);
+          setAuthError(null);
+          setIsCheckingAuth(false);
+          return;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (!isActive) {
+        return;
+      }
+
+      const message = lastError instanceof Error ? lastError.message : "Unable to verify API key.";
+
+      if (isAuthFailureMessage(message)) {
         window.localStorage.removeItem(API_KEY_STORAGE_KEY);
         setApiKey(null);
-        setAuthError(error instanceof Error ? error.message : "Invalid or expired API key.");
-      })
-      .finally(() => {
-        if (!isActive) {
-          return;
-        }
+        setAuthError(message || "Invalid or expired API key.");
+      } else {
+        // Keep key for transient outages so users are not forced to re-enter invite codes.
+        setApiKey(storedKey);
+        setNotesError("The API is temporarily unavailable. Retrying shortly may resolve this.");
+      }
 
-        setIsCheckingAuth(false);
-      });
+      setIsCheckingAuth(false);
+    };
+
+    void bootstrapAuth();
 
     return () => {
       isActive = false;
